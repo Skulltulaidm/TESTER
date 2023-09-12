@@ -1,28 +1,102 @@
+import re
+import pandas as pd
+import fitz
 import streamlit as st
-import importlib
 
-st.title("Conversor de PDF a Excel")
+def read_pdf(file_path):
+    with fitz.open(file_path) as pdf_document:
+        return "\n".join([page.get_text() for page in pdf_document])
 
-# Elegir el banco
-banco = st.selectbox("Selecciona el banco de tu estado de cuenta:", ["Monex", "Banorte", "Santander"])
+def combine_lines(lines, pattern):
+    combined_lines = []
+    current_line = ""
 
-# Subir archivo PDF
-uploaded_file = st.file_uploader("Sube tu estado de cuenta en PDF:", type=["pdf"])
+    for line in lines:
+        if re.match(pattern, line):
+            if current_line:
+                combined_lines.append(current_line.strip())
+            current_line = line
+        else:
+            current_line += " " + line.strip()
 
-if uploaded_file is not None:
-    with st.spinner("Procesando el archivo PDF..."):
-        # Importación dinámica del módulo del banco seleccionado
-        bank_module = importlib.import_module(banco.lower())
+    if current_line:
+        combined_lines.append(current_line.strip())
 
-        # Procesamiento del PDF usando la función del módulo del banco
-        output = bank_module.process_pdf(uploaded_file)
+    return "\n".join(combined_lines)
 
-    st.success("Proceso completado")
 
-    # Descargar archivo Excel
-    st.download_button(
-        label="Descargar archivo Excel",
-        data=output,
-        file_name=f"Estado_de_Cuenta_{banco}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+def process_matches(matches):
+    data = []
+    for match in matches:
+        cod_transacc, cantidad = match[4], match[6]
+        deposito = cantidad if cod_transacc == "003" else "0"
+        retiro = cantidad if cod_transacc != "003" else "0"
+        cheque = match[10] if match[10] else match[11]
+
+        data.append(
+            {
+                "Fecha Operacion": match[0],
+                "Fecha": match[1],
+                "Referencia": match[2],
+                "Descripción": match[3],
+                "Cod. Transacc": cod_transacc,
+                "Sucursal": match[5],
+                "Depositos": deposito,
+                "Retiros": retiro,
+                "Saldo": match[7],
+                "Movimiento": match[8],
+                "Descripción Detallada": match[9],
+                "Cheque": cheque,
+            }
+        )
+
+    return pd.DataFrame(data)
+
+
+# Streamlit UI
+st.title("PDF a Excel")
+uploaded_file = st.file_uploader("Sube tu archivo PDF", type=["pdf"])
+
+if uploaded_file:
+    with st.spinner("Procesando PDF..."):
+        fecha_pattern = r"\d{2}/\d{2}/\d{4}"
+
+        # Read PDF
+        all_text = read_pdf(uploaded_file)
+        lines = all_text.split("\n")
+        combined_text = combine_lines(lines, fecha_pattern)
+
+        pattern_flexible = re.compile(
+            r"(\d{2}/\d{2}/\d{4})\s+"  # Fecha de operación
+            r"(\d{2}/\d{2}/\d{4})\s+"  # Fecha
+            r"(\d{10})?\s*"  # Referencia (hacerlo más flexible)
+            r"([\w\s\.\:\-]+?)\s+"  # Descripción (hacerlo más flexible)
+            r"(\d{3})\s+"  # Código de transacción
+            r"(\d{4})\s+"  # Sucursal
+            r"(\$?\d{1,3}(?:,\d{3})*\.\d{2})\s+"  # Deposito / Retiro
+            r"(\$?\d{1,3}(?:,\d{3})*\.\d{2})\s+"  # Saldo
+            r"(\d{4})\s+"  # Movimiento
+            r"(.*?)\s*"  # Descripción Detallada (opcional)
+            r"(?:(-)|(\$?(?!0{1,3}\.\d{2})\d{1,3}(?:,\d{3})*\.\d{2}))\s*"  # Cheque (guion o monto no "00.00")
+        )
+
+        matches_flexible = pattern_flexible.findall(combined_text)
+        df_flexible = process_matches(matches_flexible)
+
+    if df_flexible.empty:
+        st.write("No se encontraron datos en el PDF.")
+    else:
+        st.write("PDF procesado con éxito.")
+        st.dataframe(df_flexible)
+
+        # Descargar como archivo Excel
+        towrite = pd.ExcelWriter("output.xlsx")
+        df_flexible.to_excel(towrite, index=False, sheet_name="Sheet1")
+        towrite.save()
+
+        st.download_button(
+            label="Descargar Excel",
+            data=open("output.xlsx", "rb"),
+            file_name="output.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
