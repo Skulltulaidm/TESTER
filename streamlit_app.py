@@ -4,7 +4,7 @@ import fitz
 import streamlit as st
 
 def read_pdf(file_path):
-    with fitz.open(file_path) as pdf_document:
+    with fitz.open(stream=uploaded_file.read(), filetype="pdf") as pdf_document:
         return "\n".join([page.get_text() for page in pdf_document])
 
 def combine_lines(lines, pattern):
