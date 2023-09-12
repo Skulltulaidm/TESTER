@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Black">
+    <option name="enabledOnReformat" value="true" />
+    <option name="pathToExecutable" value="/Library/Frameworks/Python.framework/Versions/3.11/bin/black" />
+    <option name="sdkUUID" value="f8be6ee2-2586-462e-a7a2-2cd3a512a753" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.11" project-jdk-type="Python SDK" />
+</project>
