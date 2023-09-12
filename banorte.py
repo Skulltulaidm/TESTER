@@ -1,11 +1,12 @@
-from frontend import *
 import re
 import pandas as pd
 import fitz
+from io import BytesIO
+from frontend import *
 
-def read_pdf(file_path):
-    with fitz.open(file_path) as pdf_document:
-        return '\n'.join([page.get_text() for page in pdf_document])
+def read_pdf(file):
+    with fitz.open(stream=file, filetype="pdf") as pdf_document:
+        return "\n".join([page.get_text() for page in pdf_document])
 
 def combine_lines(lines, pattern):
     combined_lines = []
@@ -49,29 +50,34 @@ def process_matches(matches):
 
     return pd.DataFrame(data)
 
-if __name__ == '__main__':
-    file_path = "Banorte.pdf"
-    fecha_pattern = r'\d{2}/\d{2}/\d{4}'
+def process_pdf(uploaded_file):
+    fecha_pattern = r"\d{2}/\d{2}/\d{4}"
 
-    all_text = read_pdf(file_path)
-    lines = all_text.split('\n')
+    all_text = read_pdf(uploaded_file)
+    lines = all_text.split("\n")
     combined_text = combine_lines(lines, fecha_pattern)
 
     pattern_flexible = re.compile(
-        r'(\d{2}/\d{2}/\d{4})\s+'  # Fecha de operación
-        r'(\d{2}/\d{2}/\d{4})\s+'  # Fecha
-        r'(\d{10})?\s*'  # Referencia (hacerlo más flexible)
-        r'([\w\s\.\:\-]+?)\s+'  # Descripción (hacerlo más flexible)
-        r'(\d{3})\s+'  # Código de transacción
-        r'(\d{4})\s+'  # Sucursal
-        r'(\$?\d{1,3}(?:,\d{3})*\.\d{2})\s+'  # Deposito / Retiro
-        r'(\$?\d{1,3}(?:,\d{3})*\.\d{2})\s+'  # Saldo
-        r'(\d{4})\s+'  # Movimiento
-        r'(.*?)\s*'    # Descripción Detallada (opcional)
-        r'(?:(-)|(\$?(?!0{1,3}\.\d{2})\d{1,3}(?:,\d{3})*\.\d{2}))\s*'  # Cheque (guion o monto no "00.00")
-    )
+    r"(\d{2}/\d{2}/\d{4})\s+"  # Fecha de operación
+    r"(\d{2}/\d{2}/\d{4})\s+"  # Fecha
+    r"(\d{10})?\s*"  # Referencia (hacerlo más flexible)
+    r"([\w\s\.\:\-]+?)\s+"  # Descripción (hacerlo más flexible)
+    r"(\d{3})\s+"  # Código de transacción
+    r"(\d{4})\s+"  # Sucursal
+    r"(\$?\d{1,3}(?:,\d{3})*\.\d{2})\s+"  # Deposito / Retiro
+    r"(\$?\d{1,3}(?:,\d{3})*\.\d{2})\s+"  # Saldo
+    r"(\d{4})\s+"  # Movimiento
+    r"(.*?)\s*"  # Descripción Detallada (opcional)
+    r"(?:(-)|(\$?(?!0{1,3}\.\d{2})\d{1,3}(?:,\d{3})*\.\d{2}))\s*"  # Cheque (guion o monto no "00.00")
+)
 
     matches_flexible = pattern_flexible.findall(combined_text)
     df_flexible = process_matches(matches_flexible)
 
-    print(df_flexible.head(85))
+    # Guardar como archivo Excel en un buffer
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_flexible.to_excel(writer, index=False)
+    output.seek(0)
+
+    return output
