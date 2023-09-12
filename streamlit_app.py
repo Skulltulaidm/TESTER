@@ -2,6 +2,7 @@ import re
 import pandas as pd
 import fitz
 import streamlit as st
+from io import BytesIO
 
 def read_pdf(file_path):
     with fitz.open(stream=uploaded_file.read(), filetype="pdf") as pdf_document:
@@ -90,13 +91,15 @@ if uploaded_file:
         st.dataframe(df_flexible)
 
         # Descargar como archivo Excel
-        towrite = pd.ExcelWriter("output.xlsx")
-        df_flexible.to_excel(towrite, index=False, sheet_name="Sheet1")
-        towrite.save()
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_flexible.to_excel(writer, index=False)
+        output.seek(0)
 
+        # Descargar archivo Excel
         st.download_button(
-            label="Descargar Excel",
-            data=open("output.xlsx", "rb"),
-            file_name="output.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            label="Descargar archivo Excel",
+            data=output,
+            file_name="Estado_de_Cuenta.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
